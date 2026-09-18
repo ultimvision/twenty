@@ -28,6 +28,9 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+      # The first boot initialises the database and runs every migration before
+      # the HTTP server listens, which outlasts interval x retries on a small VM.
+      start_period: 600s
     restart: always
 
   worker:
