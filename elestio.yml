@@ -1,0 +1,48 @@
+ports:
+  - protocol: "HTTPS"
+    targetProtocol: "HTTP"
+    listeningPort: "443"
+    targetPort: "3000"
+    targetIP: "172.17.0.1"
+    public: true
+    path: "/"
+    isAuth: false
+
+environments:
+  - key: "SOFTWARE_VERSION_TAG"
+    value: "latest"
+  - key: "SERVER_URL"
+    value: "https://[CI_CD_DOMAIN]"
+  - key: "ENCRYPTION_KEY"
+    value: "random_password"
+  - key: "PG_DATABASE_USER"
+    value: "postgres"
+  - key: "PG_DATABASE_PASSWORD"
+    value: "random_password"
+  - key: "PG_DATABASE_HOST"
+    value: "db"
+  - key: "PG_DATABASE_PORT"
+    value: "5432"
+  - key: "PG_DATABASE_NAME"
+    value: "default"
+  - key: "REDIS_URL"
+    value: "redis://redis:6379"
+  - key: "STORAGE_TYPE"
+    value: "local"
+
+config:
+  runTime: "dockerCompose"
+  version: ""
+  framework: ""
+  buildCommand: "docker-compose build"
+  buildDir: "/"
+  runCommand: "docker-compose up -d"
+  icon: ""
+  screenshot: ""
+
+lifeCycleConfig:
+  preInstallCommand: "./packages/twenty-docker/elestio/scripts/preInstall.sh"
+
+webUI:
+  - url: "https://[CI_CD_DOMAIN]"
+    label: "Twenty"
