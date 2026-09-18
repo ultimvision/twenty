@@ -54,3 +54,16 @@ domain Elestio assigned, and `ENCRYPTION_KEY` must be a fresh random secret.
 - Redis has no volume, same as upstream: queued background jobs are lost on
   restart. Add a `./storage/redis:/data` bind mount if that matters to you.
 - Twenty needs at least 2 GB of RAM to run both the server and the worker.
+
+## Upgrading Twenty
+
+`SOFTWARE_VERSION_TAG` is pinned to a release tag rather than `latest` so that a
+redeploy triggered by an unrelated change cannot jump several Twenty versions and
+run their schema migrations. To upgrade, set the new tag in the dashboard and
+redeploy; to roll back, set the previous one. Available tags are on
+[Docker Hub](https://hub.docker.com/r/twentycrm/twenty/tags).
+
+Custom modules do not live in this repository. Build them as Twenty apps with
+`npx create-twenty-app`, in their own repository, and let the scaffolded `cd.yml`
+deploy them to this instance. See the
+[apps documentation](https://docs.twenty.com/developers/extend/apps/getting-started/quick-start).
