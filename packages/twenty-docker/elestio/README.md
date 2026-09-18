@@ -2,15 +2,31 @@
 
 Elestio's CI/CD pipeline clones this repository on the target VM, writes a `.env`
 file at the repository root from the variables configured in the dashboard, then
-runs the build and run commands declared in `elestio.yml`.
+runs the build and run commands.
 
 ## Files it relies on
 
 | File | Why it exists |
 | --- | --- |
-| `elestio.yml` (repo root) | Pipeline descriptor: reverse proxy ports, environment variables, runtime, lifecycle hooks. Elestio only reads it from the repository root. |
-| `docker-compose.yml` (repo root) | The stack Elestio starts. Kept separate from `packages/twenty-docker/docker-compose.yml` so upstream merges stay conflict-free. |
-| `packages/twenty-docker/elestio/scripts/preInstall.sh` | Creates the bind-mounted data directories with the ownership the images expect. |
+| `docker-compose.yml` (repo root) | The stack Elestio starts. Elestio only detects the `dockerCompose` runtime when this file is at the root of the deployed branch. Kept separate from `packages/twenty-docker/docker-compose.yml` so upstream merges stay conflict-free. |
+| `scripts/preInstall.sh` (repo root) | Creates the bind-mounted data directories with the ownership the images expect. |
+| `elestio.yml` (repo root) | Same settings in Elestio's template format. The wizard does not read it when you create a custom CI/CD pipeline, so it only serves as the reference for the values to enter, and for publishing this as an Elestio template later. |
+| `packages/twenty-docker/elestio/.env.example` | Ready to paste or upload into the dashboard's environment variables editor. |
+
+## Wizard settings
+
+| Field | Value |
+| --- | --- |
+| Branch | the branch carrying the root `docker-compose.yml` |
+| Application type | Full Stack |
+| Runtime | Docker Compose |
+| Build command | `docker-compose build` |
+| Run command | `docker-compose --env-file .env up -d --build` |
+| Pre install command | `./scripts/preInstall.sh` |
+| Reverse proxy | HTTPS 443 to HTTP `172.17.0.1:3000`, path `/` |
+
+Environment variables come from `.env.example`. `SERVER_URL` has to match the
+domain Elestio assigned, and `ENCRYPTION_KEY` must be a fresh random secret.
 
 ## Differences with the generic self-hosting compose file
 
@@ -26,23 +42,15 @@ runs the build and run commands declared in `elestio.yml`.
 - **`SOFTWARE_VERSION_TAG` instead of `TAG`** for the image tag, which is the
   variable Elestio's version updater writes.
 
-## Setup
-
-1. Create an Elestio CI/CD service, pointing at this repository and the branch
-   you deploy from.
-2. Elestio picks up `elestio.yml` and pre-fills the environment variables. The
-   ones marked `random_password` are generated at install time.
-3. Check `SERVER_URL` matches the domain Elestio assigned (it defaults to
-   `https://[CI_CD_DOMAIN]`, which Elestio substitutes). It has to match what
-   users type in the browser, otherwise generated links and secure cookies break.
-4. Deploy. The first boot runs the database migrations from the server
-   container's entrypoint, which takes a few minutes.
-
 ## Notes
 
 - `ENCRYPTION_KEY` protects every secret stored in the database (OAuth tokens,
   application variables, TOTP secrets). Losing it means losing access to them, so
-  keep the generated value backed up.
+  keep the value backed up.
 - If you change `PG_DATABASE_PASSWORD`, use alphanumeric characters only: it is
   interpolated into a Postgres connection URL that is not URL-encoded.
+- The first boot runs the database migrations from the server container's
+  entrypoint, which takes a few minutes before the health check turns green.
+- Redis has no volume, same as upstream: queued background jobs are lost on
+  restart. Add a `./storage/redis:/data` bind mount if that matters to you.
 - Twenty needs at least 2 GB of RAM to run both the server and the worker.

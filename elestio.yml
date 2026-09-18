@@ -36,12 +36,12 @@ config:
   framework: ""
   buildCommand: "docker-compose build"
   buildDir: "/"
-  runCommand: "docker-compose up -d"
+  runCommand: "docker-compose --env-file .env up -d --build"
   icon: ""
   screenshot: ""
 
 lifeCycleConfig:
-  preInstallCommand: "./packages/twenty-docker/elestio/scripts/preInstall.sh"
+  preInstallCommand: "./scripts/preInstall.sh"
 
 webUI:
   - url: "https://[CI_CD_DOMAIN]"
