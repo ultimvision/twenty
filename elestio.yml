@@ -10,7 +10,7 @@ ports:
 
 environments:
   - key: "SOFTWARE_VERSION_TAG"
-    value: "v2.41.0"
+    value: "v2.42.6"
   - key: "SERVER_URL"
     value: "https://[CI_CD_DOMAIN]"
   - key: "ENCRYPTION_KEY"
