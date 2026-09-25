@@ -5,9 +5,14 @@
 
 name: twenty
 
+# The image tag is pinned here rather than read from SOFTWARE_VERSION_TAG: the
+# Elestio pipeline materialises its environment variables once at creation and
+# never re-reads elestio.yml, while it does resynchronise this file from the
+# repo on every deploy. Pinning here keeps the repo the single source of truth.
+
 services:
   server:
-    image: twentycrm/twenty:${SOFTWARE_VERSION_TAG:-latest}
+    image: twentycrm/twenty:v2.42.6
     volumes:
       - ./storage/server-local-data:/app/packages/twenty-server/.local-storage
     ports:
@@ -34,7 +39,7 @@ services:
     restart: always
 
   worker:
-    image: twentycrm/twenty:${SOFTWARE_VERSION_TAG:-latest}
+    image: twentycrm/twenty:v2.42.6
     volumes:
       - ./storage/server-local-data:/app/packages/twenty-server/.local-storage
     command: ["yarn", "worker:prod"]

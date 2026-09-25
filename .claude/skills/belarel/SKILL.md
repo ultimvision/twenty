@@ -131,35 +131,41 @@ la valeur littérale `"random_password"` qui figure dans `elestio.yml`. Si Elest
 relisait le fichier à chaque déploiement, il écraserait la clé et casserait
 l'instance.
 
-Le vrai bump se fait **dans l'UI Elestio**:
-
-```
-Elestio -> service cicd-twenty-belarel -> CI/CD -> pipeline "twenty"
-        -> Environment variables -> SOFTWARE_VERSION_TAG = vNOUVELLE
-        -> sauvegarder, ce qui redéploie
-```
-
 Aucun outil MCP ne permet de modifier les variables d'un pipeline existant
 (`deploy_cicd_target` crée un service, `change_service_version` ne vise que les
-services templatés). C'est une étape manuelle.
+services templatés). Passer par l'UI serait une étape manuelle à chaque montée.
 
-Mettre quand même `elestio.yml` à jour dans le même mouvement, pour que le repo
-reste la documentation de l'état voulu et qu'une recréation du pipeline reparte
-du bon pied:
+**La solution: ne pas dépendre de la variable du tout.** Elestio resynchronise
+`docker-compose.yml` depuis le repo à chaque déploiement (prouvé le 25 septembre
+2026). Le tag de l'image y est donc épinglé en dur:
+
+```yaml
+image: twentycrm/twenty:v2.42.6    # dans les services server ET worker
+```
+
+Le bump redevient ce qu'il devait être: une valeur à changer dans le repo, un
+push, et le webhook fait le reste.
 
 ```bash
-# elestio.yml -> SOFTWARE_VERSION_TAG: "vNOUVELLE"
-git add elestio.yml && git commit -m "Bump Twenty to vNOUVELLE" && git push
+# docker-compose.yml -> image: twentycrm/twenty:vNOUVELLE  (deux occurrences)
+# elestio.yml        -> SOFTWARE_VERSION_TAG: "vNOUVELLE" (documentation seulement)
+git commit -am "Bump Twenty to vNOUVELLE" && git push
 ```
+
+Garder `elestio.yml` à jour malgré tout: il ne pilote rien sur le pipeline
+existant, mais il documente l'état voulu et sert si le pipeline est recréé.
 
 ## Comment savoir si le bump a VRAIMENT pris
 
 Un déploiement qui réussit ne prouve rien: si l'image ne change pas, le conteneur
 n'est pas recréé et `buildStatus` passe à `success` sans rien changer.
 
-**Le seul signal fiable** est `get_pipeline` -> champ `envVars`. Il doit montrer
-la nouvelle valeur de `SOFTWARE_VERSION_TAG`. C'est ce qui est écrit dans le
-`.env` du serveur, donc ce que le compose résout pour le tag de l'image.
+**Le signal fiable** est `get_pipeline` -> champ `dockerCompose`. Il doit montrer
+le nouveau tag épinglé. C'est la copie qu'Elestio a resynchronisée depuis le
+repo, donc ce qui tourne réellement.
+
+Ignorer le champ `envVars`: `SOFTWARE_VERSION_TAG` y reste figé à sa valeur de
+création et ne pilote plus rien depuis que le tag est épinglé dans le compose.
 
 **Une coupure ne prouve rien.** Piège constaté le 25 septembre 2026: le
 déploiement a produit une fenêtre de 502 d'environ 100 secondes alors que
