@@ -157,13 +157,21 @@ git add elestio.yml && git commit -m "Bump Twenty to vNOUVELLE" && git push
 Un déploiement qui réussit ne prouve rien: si l'image ne change pas, le conteneur
 n'est pas recréé et `buildStatus` passe à `success` sans rien changer.
 
-Deux signaux fiables:
+**Le seul signal fiable** est `get_pipeline` -> champ `envVars`. Il doit montrer
+la nouvelle valeur de `SOFTWARE_VERSION_TAG`. C'est ce qui est écrit dans le
+`.env` du serveur, donc ce que le compose résout pour le tag de l'image.
 
-- `get_pipeline` -> champ `envVars`, il doit montrer la nouvelle valeur de
-  `SOFTWARE_VERSION_TAG`. C'est ce qui est écrit dans le `.env` du serveur.
-- **L'app doit tomber.** Un vrai changement d'image recrée le conteneur et
-  provoque une fenêtre de 502 suivie des migrations. Si `/healthz` répond 200 en
-  continu pendant tout le déploiement, l'image n'a pas bougé.
+**Une coupure ne prouve rien.** Piège constaté le 25 septembre 2026: le
+déploiement a produit une fenêtre de 502 d'environ 100 secondes alors que
+l'image n'avait pas changé. `docker-compose up -d --build` recrée les conteneurs
+dès que le fichier compose change sur le serveur, et Elestio le resynchronise
+depuis le repo à chaque déploiement. Une coupure signale une recréation de
+conteneur, pas un changement de version.
+
+Signal secondaire utile, la **durée**: une vraie montée de version rejoue les
+commandes d'upgrade. Pour 2.41 -> 2.42 il y en a 46 dont un backfill de données.
+Une coupure de 100 secondes est bien trop courte pour ça. Si la remontée est
+rapide, c'est que rien n'a migré.
 
 ## 4. Vérifier (obligatoire, voir plus bas)
 
