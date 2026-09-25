@@ -160,9 +160,37 @@ existant, mais il documente l'état voulu et sert si le pipeline est recréé.
 Un déploiement qui réussit ne prouve rien: si l'image ne change pas, le conteneur
 n'est pas recréé et `buildStatus` passe à `success` sans rien changer.
 
-**Le signal fiable** est `get_pipeline` -> champ `dockerCompose`. Il doit montrer
-le nouveau tag épinglé. C'est la copie qu'Elestio a resynchronisée depuis le
-repo, donc ce qui tourne réellement.
+**La preuve directe, par SSH** (voir la section Accès SSH plus bas):
+
+```bash
+ssh -i ~/.ssh/id_ed25519 root@cicd-twenty-belarel-u50406.vm.elestio.app \
+  'docker ps --format "{{.Names}}\t{{.Image}}\t{{.Status}}"'
+```
+
+`twenty-server-1` et `twenty-worker-1` doivent porter le nouveau tag. C'est la
+seule vérification qui ne laisse aucun doute.
+
+**Les migrations, par la table de suivi.** Twenty enregistre chaque commande
+d'upgrade dans `core."upgradeMigration"` avec la version qui l'a exécutée:
+
+```sql
+select "executedByVersion", status, count(*)
+from core."upgradeMigration" group by 1,2 order by 1,2;
+
+select name, status, attempt, "errorMessage"
+from core."upgradeMigration" where status <> 'completed';
+```
+
+La première doit montrer une ligne `<nouvelle version> | completed | N`, la
+seconde doit être vide.
+
+**Signaux indirects, utiles quand SSH n'est pas disponible:**
+
+- `get_pipeline` -> champ `dockerCompose`, qui doit montrer le nouveau tag
+  épinglé (c'est la copie resynchronisée depuis le repo)
+- le hash du bundle frontend change: `curl -s https://crm.insightdialog.ai/ |
+  grep -oE 'index-[A-Za-z0-9_-]+\.js'`. Le front est compilé dans l'image, donc
+  un hash différent prouve une image différente.
 
 Ignorer le champ `envVars`: `SOFTWARE_VERSION_TAG` y reste figé à sa valeur de
 création et ne pilote plus rien depuis que le tag est épinglé dans le compose.
@@ -228,6 +256,38 @@ curl -s -o /dev/null -w "%{http_code}\n" https://crm.insightdialog.ai/graphql
 
 Les trois doivent répondre 200. Un bump de version fait tourner les migrations au boot: prévoir plusieurs minutes avant le premier 200, et surveiller que le conteneur ne boucle pas en restart.
 
+## Accès SSH
+
+Le MCP Elestio n'a aucun outil de requête ni d'exécution, et le Postgres ne
+publie aucun port (le service `db` du compose n'a pas de section `ports:`). Il
+n'est joignable que depuis le réseau Docker de la VM. Pour toute inspection de
+la base, il faut donc SSH.
+
+```bash
+ssh -i ~/.ssh/id_ed25519 root@cicd-twenty-belarel-u50406.vm.elestio.app
+```
+
+Conteneurs: `twenty-server-1`, `twenty-worker-1`, `twenty-db-1`, `twenty-redis-1`,
+plus `elestio-nginx` et `elestio-postfix`.
+
+Pour une requête, passer le SQL par stdin plutôt que par `-c`: le quoting
+imbriqué shell/ssh/psql est ingérable autrement.
+
+```bash
+ssh -i ~/.ssh/id_ed25519 root@cicd-twenty-belarel-u50406.vm.elestio.app \
+  'docker exec -i twenty-db-1 psql -U postgres -d default' < requete.sql
+```
+
+Les clés SSH sont rattachées **par service**, pas au compte. La page "Manage SSH
+Keys" de l'UI ne suffit pas: vérifier avec `list_ssh_keys` et ajouter au besoin
+avec `add_ssh_key` (project_id 86992, vm_id 601718478). La clé doit être fournie
+**sans le commentaire final**, sinon Elestio la rejette.
+
+Le MCP `postgres` de `.mcp.json` ne sert à rien ici: il source
+`packages/twenty-server/.env`, qui n'existe pas dans ce dépôt. C'est la config de
+dev de l'amont, pour un environnement local jamais monté. D'où son
+`CONNECTION_CLOSED` permanent.
+
 ## Sauvegardes
 
 Backups distants quotidiens à 01:00, 7 jours retenus.
@@ -263,14 +323,15 @@ mcp__elestio__poweron_service       -> si le VM est éteint
 
 # État de référence
 
-Au 25 septembre 2026:
+Au 25 septembre 2026, après la montée v2.41.0 -> v2.42.6:
 
-- Commit déployé: `5a0077d854`
-- Image réellement servie: **`v2.41.0`**, le bump vers `v2.42.6` est écrit dans
-  `elestio.yml` mais pas encore appliqué dans les variables du pipeline Elestio
-- Disponible: `twenty/v2.42.6`
-- Compose de référence: inchangé entre `v2.41.0` et `v2.42.6`, aucune adaptation
-  de fichier nécessaire
-- `v2.42` apporte 46 commandes d'upgrade dont 1 backfill de données et 16
-  commandes workspace. Prévoir des migrations longues au premier boot, c'est ce
-  que couvre le `start_period: 600s`.
+- Commit déployé: `4d28cf07c4`
+- Image confirmée par `docker ps`: **`twentycrm/twenty:v2.42.6`** sur `server` et
+  `worker`
+- Migrations: **38 commandes exécutées par `v2.42.6`, toutes `completed`, zéro
+  échec** dans toute la table `upgradeMigration` (194 autres datent de
+  l'installation initiale en `v2.41.0`)
+- `SERVER_URL` corrigé vers `https://crm.insightdialog.ai`
+- VM: MEDIUM-2C-4G, disque 60 GB (downgrade encore possible)
+- Base: schéma `core` (76 tables) + un workspace
+  `workspace_a0u6ldjbg2hfs9vjc94132bmz` (36 tables)
