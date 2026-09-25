@@ -119,14 +119,51 @@ Différences volontaires à ne pas "corriger":
 - `SERVER_URL`, `ENCRYPTION_KEY`, `STORAGE_TYPE` viennent du `.env` généré par `elestio.yml`, pas du compose
 - `start_period: 600s` sur le healthcheck du serveur est un ajout Belarel, le garder
 
-## 3. Bumper et pousser
+## 3. Bumper
+
+**Modifier `elestio.yml` ne suffit PAS.** Vérifié le 25 septembre 2026: le bloc
+`environments:` de `elestio.yml` n'est lu que par l'assistant de création du
+pipeline. Sur un pipeline existant, il n'est jamais relu. Les variables sont
+matérialisées une fois puis vivent dans la config du pipeline Elestio.
+
+La preuve: `ENCRYPTION_KEY` dans le pipeline contient une vraie clé générée, pas
+la valeur littérale `"random_password"` qui figure dans `elestio.yml`. Si Elestio
+relisait le fichier à chaque déploiement, il écraserait la clé et casserait
+l'instance.
+
+Le vrai bump se fait **dans l'UI Elestio**:
+
+```
+Elestio -> service cicd-twenty-belarel -> CI/CD -> pipeline "twenty"
+        -> Environment variables -> SOFTWARE_VERSION_TAG = vNOUVELLE
+        -> sauvegarder, ce qui redéploie
+```
+
+Aucun outil MCP ne permet de modifier les variables d'un pipeline existant
+(`deploy_cicd_target` crée un service, `change_service_version` ne vise que les
+services templatés). C'est une étape manuelle.
+
+Mettre quand même `elestio.yml` à jour dans le même mouvement, pour que le repo
+reste la documentation de l'état voulu et qu'une recréation du pipeline reparte
+du bon pied:
 
 ```bash
 # elestio.yml -> SOFTWARE_VERSION_TAG: "vNOUVELLE"
 git add elestio.yml && git commit -m "Bump Twenty to vNOUVELLE" && git push
 ```
 
-Le webhook fait le reste.
+## Comment savoir si le bump a VRAIMENT pris
+
+Un déploiement qui réussit ne prouve rien: si l'image ne change pas, le conteneur
+n'est pas recréé et `buildStatus` passe à `success` sans rien changer.
+
+Deux signaux fiables:
+
+- `get_pipeline` -> champ `envVars`, il doit montrer la nouvelle valeur de
+  `SOFTWARE_VERSION_TAG`. C'est ce qui est écrit dans le `.env` du serveur.
+- **L'app doit tomber.** Un vrai changement d'image recrée le conteneur et
+  provoque une fenêtre de 502 suivie des migrations. Si `/healthz` répond 200 en
+  continu pendant tout le déploiement, l'image n'a pas bougé.
 
 ## 4. Vérifier (obligatoire, voir plus bas)
 
@@ -194,7 +231,11 @@ mcp__elestio__poweron_service       -> si le VM est éteint
 
 **Un resize Elestio ne rallume pas le VM.** Après un changement de plan, `status` reste à `off` et le site est injoignable. Il faut `poweron_service`. La stack remonte ensuite en ~90 secondes.
 
-**Le pipeline Elestio garde sa propre copie du `docker-compose.yml`.** Elle date de la création du pipeline (18 sept) et n'a pas le `start_period: 600s` ajouté depuis. Lequel gagne au déploiement n'a pas encore été tranché: le redémarrage post-resize n'a pas rejoué de migrations. À vérifier au prochain vrai rebuild avec migrations. Si le conteneur boucle en restart pendant les migrations, c'est la copie Elestio qui gagne et il faut la mettre à jour dans l'UI.
+**Le `docker-compose.yml` du repo gagne. Tranché le 25 septembre 2026.** Le pipeline garde une copie du compose, mais elle est resynchronisée depuis le repo à chaque déploiement: le `start_period: 600s` absent de la copie stockée y est apparu après le push. Le repo est la source de vérité pour le compose.
+
+**Les variables d'environnement, elles, ne sont PAS resynchronisées.** Asymétrie à retenir: Elestio relit `docker-compose.yml` mais ignore le bloc `environments:` de `elestio.yml`. Voir la boucle 2.
+
+**`SERVER_URL` du pipeline pointe sur le mauvais domaine.** Il vaut `https://twenty-u50406.vm.elestio.app` alors que le domaine servi est `crm.insightdialog.ai`. À corriger dans l'UI en même temps qu'un bump, les liens générés par le serveur (courriels d'invitation, callbacks OAuth) utilisent cette valeur.
 
 **Variables d'environnement absentes.** `APP_SECRET` n'est ni dans le compose ni dans `elestio.yml`. Si le serveur en régénère une à chaque démarrage, les sessions utilisateur sautent à chaque redéploiement. À vérifier.
 
@@ -210,7 +251,12 @@ mcp__elestio__poweron_service       -> si le VM est éteint
 
 Au 25 septembre 2026:
 
-- Déployé: `v2.41.0`, commit `2efe61b9c8`
+- Commit déployé: `5a0077d854`
+- Image réellement servie: **`v2.41.0`**, le bump vers `v2.42.6` est écrit dans
+  `elestio.yml` mais pas encore appliqué dans les variables du pipeline Elestio
 - Disponible: `twenty/v2.42.6`
-- Divergence: 4 devant, 306 derrière `twentyhq/twenty`
-- Compose de référence: **inchangé** entre `v2.41.0` et `v2.42.6`, donc un bump vers 2.42.6 ne demande aucune adaptation
+- Compose de référence: inchangé entre `v2.41.0` et `v2.42.6`, aucune adaptation
+  de fichier nécessaire
+- `v2.42` apporte 46 commandes d'upgrade dont 1 backfill de données et 16
+  commandes workspace. Prévoir des migrations longues au premier boot, c'est ce
+  que couvre le `start_period: 600s`.
