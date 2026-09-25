@@ -249,7 +249,7 @@ mcp__elestio__poweron_service       -> si le VM est éteint
 
 **Les variables d'environnement, elles, ne sont PAS resynchronisées.** Asymétrie à retenir: Elestio relit `docker-compose.yml` mais ignore le bloc `environments:` de `elestio.yml`. Voir la boucle 2.
 
-**`SERVER_URL` du pipeline pointe sur le mauvais domaine.** Il vaut `https://twenty-u50406.vm.elestio.app` alors que le domaine servi est `crm.insightdialog.ai`. À corriger dans l'UI en même temps qu'un bump, les liens générés par le serveur (courriels d'invitation, callbacks OAuth) utilisent cette valeur.
+**`SERVER_URL` du pipeline pointe sur le mauvais domaine, et c'est réglé dans le compose.** Le `.env` généré contient `https://twenty-u50406.vm.elestio.app`, figé à la création du pipeline, alors que le domaine servi est `crm.insightdialog.ai`. Le bloc `environment:` du compose l'écrase, parce qu'il a priorité sur `env_file:` en docker-compose. Même patron que pour le tag d'image: tout ce que le pipeline a figé se corrige depuis le repo, qui lui est resynchronisé.
 
 **Variables d'environnement absentes.** `APP_SECRET` n'est ni dans le compose ni dans `elestio.yml`. Si le serveur en régénère une à chaque démarrage, les sessions utilisateur sautent à chaque redéploiement. À vérifier.
 

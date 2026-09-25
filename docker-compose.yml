@@ -21,6 +21,9 @@ services:
       - ./.env
     environment:
       NODE_PORT: 3000
+      # Overrides the .env value, which the pipeline froze to the vm.elestio.app
+      # hostname at creation. Every link the server generates uses this.
+      SERVER_URL: https://crm.insightdialog.ai
       PG_DATABASE_URL: postgres://${PG_DATABASE_USER:-postgres}:${PG_DATABASE_PASSWORD:-postgres}@${PG_DATABASE_HOST:-db}:${PG_DATABASE_PORT:-5432}/${PG_DATABASE_NAME:-default}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
     depends_on:
@@ -46,6 +49,7 @@ services:
     env_file:
       - ./.env
     environment:
+      SERVER_URL: https://crm.insightdialog.ai
       PG_DATABASE_URL: postgres://${PG_DATABASE_USER:-postgres}:${PG_DATABASE_PASSWORD:-postgres}@${PG_DATABASE_HOST:-db}:${PG_DATABASE_PORT:-5432}/${PG_DATABASE_NAME:-default}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       DISABLE_DB_MIGRATIONS: "true" # it already runs on the server
